@@ -1,0 +1,101 @@
+Timing is on.
+== Q1 count, cold
+  count   
+----------
+ 60000000
+(1 row)
+
+Time: 553.652 ms
+== Q1 count, again
+  count   
+----------
+ 60000000
+(1 row)
+
+Time: 307.588 ms
+== Q2 monthly revenue 2025, cold
+   month    | bookings |   revenue    
+------------+----------+--------------
+ 2025-01-01 |  1018379 | 895789649.71
+ 2025-02-01 |   919102 | 809478859.77
+ 2025-03-01 |  1018685 | 897762675.44
+ 2025-04-01 |   985512 | 866945975.63
+ 2025-05-01 |  1018184 | 897604134.27
+ 2025-06-01 |   986320 | 867907088.82
+ 2025-07-01 |  1016274 | 894755762.06
+ 2025-08-01 |  1018452 | 896453988.89
+ 2025-09-01 |   986757 | 867800335.01
+ 2025-10-01 |  1018829 | 896090776.97
+ 2025-11-01 |   987515 | 869010631.39
+ 2025-12-01 |  1017267 | 894304438.54
+(12 rows)
+
+Time: 13524.762 ms (00:13.525)
+== Q2 again
+   month    | bookings |   revenue    
+------------+----------+--------------
+ 2025-01-01 |  1018379 | 895789649.71
+ 2025-02-01 |   919102 | 809478859.77
+ 2025-03-01 |  1018685 | 897762675.44
+ 2025-04-01 |   985512 | 866945975.63
+ 2025-05-01 |  1018184 | 897604134.27
+ 2025-06-01 |   986320 | 867907088.82
+ 2025-07-01 |  1016274 | 894755762.06
+ 2025-08-01 |  1018452 | 896453988.89
+ 2025-09-01 |   986757 | 867800335.01
+ 2025-10-01 |  1018829 | 896090776.97
+ 2025-11-01 |   987515 | 869010631.39
+ 2025-12-01 |  1017267 | 894304438.54
+(12 rows)
+
+Time: 9099.154 ms (00:09.099)
+== Q3 one hotel, history + recent
+ source  | count | avg_rate 
+---------+-------+----------
+ recent  |   393 |   214.21
+ history | 11904 |   218.03
+(2 rows)
+
+Time: 9261.399 ms (00:09.261)
+== Q4 join lake with local hotels table
+   city    | bookings |  revenue  
+-----------+----------+-----------
+ Paris     |   631150 | 555701053
+ Rome      |   630323 | 554379512
+ Dubai     |   629103 | 554190333
+ Palma     |   630030 | 553952925
+ Lisbon    |   629878 | 553322280
+ Barcelona |   628248 | 553315941
+ London    |   628659 | 553205018
+ Bangkok   |   628225 | 552871664
+(8 rows)
+
+Time: 3667.130 ms (00:03.667)
+== Q4 plan
+                                                                                                                                                                 QUERY PLAN                                                                                                                                                                  
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=1411772.20..1411772.28 rows=8 width=14)
+   Output: h.city, count(*)
+   Group Key: h.city
+   ->  Hash Join  (cost=245.50..1351772.20 rows=12000000 width=6)
+         Output: h.city
+         Inner Unique: true
+         Hash Cond: (hotel_id = h.hotel_id)
+         ->  Custom Scan on public.bookings_history b  (cost=100.00..1320100.00 rows=12000000 width=4)
+               Output: booking_id, hotel_id, supplier, checkin_date, nights, room_rate, currency, status
+               Pushdown SQL: SELECT hotel_id FROM (SELECT hotel_id::INTEGER AS hotel_id, checkin_date::DATE AS checkin_date FROM system.main.iceberg_scan($aurora_analytics_parameter_1, allow_moved_paths = true) AS bookings_history) bookings_history WHERE (checkin_date >= '2025-06-01'::DATE) AND (checkin_date <= '2025-08-31'::DATE)
+               ->  ICEBERG_SCAN  (cost=0.00..0.00 rows=12000000 width=4)
+                     Table: bookings_history
+                     Filters: checkin_date>='2025-06-01'::DATE AND checkin_date<='2025-08-31'::DATE
+                     Projections: hotel_id
+         ->  Hash  (cost=83.00..83.00 rows=5000 width=10)
+               Output: h.city, h.hotel_id
+               ->  Seq Scan on public.hotels h  (cost=0.00..83.00 rows=5000 width=10)
+                     Output: h.city, h.hotel_id
+ Query Identifier: -6725784881572309642
+ Unsupported Pushdown Expressions: 
+ 1: Collation
+    Description: default
+(22 rows)
+
+Time: 452.095 ms

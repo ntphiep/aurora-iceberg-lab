@@ -1,0 +1,111 @@
+Timing is on.
+== Q2 rewrite: extract month
+ m  |  count  |       sum       
+----+---------+-----------------
+  1 | 1018379 | 895789649.71000
+  2 |  919102 | 809478859.77000
+  3 | 1018685 | 897762675.44000
+  4 |  985512 | 866945975.63000
+  5 | 1018184 | 897604134.27000
+  6 |  986320 | 867907088.82000
+  7 | 1016274 | 894755762.06000
+  8 | 1018452 | 896453988.89000
+  9 |  986757 | 867800335.01000
+ 10 | 1018829 | 896090776.97000
+ 11 |  987515 | 869010631.39000
+ 12 | 1017267 | 894304438.54000
+(12 rows)
+
+Time: 1038.651 ms (00:01.039)
+== Q2 rewrite: daily aggregate in lake, monthly rollup in Postgres
+   month    | bookings |   revenue    
+------------+----------+--------------
+ 2025-01-01 |  1018379 | 895789649.71
+ 2025-02-01 |   919102 | 809478859.77
+ 2025-03-01 |  1018685 | 897762675.44
+ 2025-04-01 |   985512 | 866945975.63
+ 2025-05-01 |  1018184 | 897604134.27
+ 2025-06-01 |   986320 | 867907088.82
+ 2025-07-01 |  1016274 | 894755762.06
+ 2025-08-01 |  1018452 | 896453988.89
+ 2025-09-01 |   986757 | 867800335.01
+ 2025-10-01 |  1018829 | 896090776.97
+ 2025-11-01 |   987515 | 869010631.39
+ 2025-12-01 |  1017267 | 894304438.54
+(12 rows)
+
+Time: 7061.145 ms (00:07.061)
+== Q3 plan (union)
+                                                                                                                                         QUERY PLAN                                                                                                                                         
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Append  (cost=1430.68..1381530.71 rows=2 width=72)
+   ->  Aggregate  (cost=1430.68..1430.69 rows=1 width=72)
+         Output: 'recent'::text, count(*), round(avg(bookings_recent.room_rate), 2)
+         ->  Bitmap Heap Scan on public.bookings_recent  (cost=7.51..1428.68 rows=398 width=6)
+               Output: bookings_recent.room_rate
+               Recheck Cond: (bookings_recent.hotel_id = 42)
+               ->  Bitmap Index Scan on bookings_recent_hotel_id_idx  (cost=0.00..7.41 rows=398 width=0)
+                     Index Cond: (bookings_recent.hotel_id = 42)
+   ->  Aggregate  (cost=1380100.00..1380100.01 rows=1 width=72)
+         Output: 'history'::text, count(*), round(avg(room_rate), 2)
+         ->  Custom Scan on public.bookings_history  (cost=100.00..1320100.00 rows=12000000 width=16)
+               Output: booking_id, hotel_id, supplier, checkin_date, nights, room_rate, currency, status
+               Pushdown SQL: SELECT room_rate FROM (SELECT hotel_id::INTEGER AS hotel_id, room_rate::DECIMAL(10,2) AS room_rate FROM system.main.iceberg_scan($aurora_analytics_parameter_1, allow_moved_paths = true) AS bookings_history) bookings_history WHERE (hotel_id = 42::INTEGER)
+               ->  ICEBERG_SCAN  (cost=0.00..0.00 rows=12000000 width=8)
+                     Table: bookings_history
+                     Filters: hotel_id=42
+                     Projections: room_rate
+ Query Identifier: 398043941028896160
+ Unsupported Pushdown Expressions: 
+ 1: Collation
+    Description: default
+ 2: Type
+    Description: numeric (column room_rate)
+(23 rows)
+
+Time: 380.485 ms
+== Q3 rewrite with materialized CTE
+ source  | count | round  
+---------+-------+--------
+ recent  |   393 | 214.21
+ history | 11904 | 218.03
+(2 rows)
+
+Time: 879.175 ms
+== copy 2025 into a native table (the old way)
+SELECT 19985655
+Time: 80338.323 ms (01:20.338)
+CREATE INDEX
+Time: 8132.802 ms (00:08.133)
+ANALYZE
+Time: 381.861 ms
+== Q2 on native table
+   month    |  count  |     sum      
+------------+---------+--------------
+ 2025-01-01 | 1018379 | 895789649.71
+ 2025-02-01 |  919102 | 809478859.77
+ 2025-03-01 | 1018685 | 897762675.44
+ 2025-04-01 |  985512 | 866945975.63
+ 2025-05-01 | 1018184 | 897604134.27
+ 2025-06-01 |  986320 | 867907088.82
+ 2025-07-01 | 1016274 | 894755762.06
+ 2025-08-01 | 1018452 | 896453988.89
+ 2025-09-01 |  986757 | 867800335.01
+ 2025-10-01 | 1018829 | 896090776.97
+ 2025-11-01 |  987515 | 869010631.39
+ 2025-12-01 | 1017267 | 894304438.54
+(12 rows)
+
+Time: 3582.163 ms (00:03.582)
+ native_size 
+-------------
+ 1742 MB
+(1 row)
+
+Time: 228.724 ms
+== stat statements
+ userid | dbid | toplevel | queryid | query | plans | total_plan_time | min_plan_time | max_plan_time | mean_plan_time | stddev_plan_time | calls | total_exec_time | min_exec_time | max_exec_time | mean_exec_time | stddev_exec_time | rows | shared_blks_hit | shared_blks_read | shared_blks_dirtied | shared_blks_written | local_blks_hit | local_blks_read | local_blks_dirtied | local_blks_written | temp_blks_read | temp_blks_written | shared_blk_read_time | shared_blk_write_time | local_blk_read_time | local_blk_write_time | temp_blk_read_time | temp_blk_write_time | wal_records | wal_fpi | wal_bytes | jit_functions | jit_generation_time | jit_inlining_count | jit_inlining_time | jit_optimization_count | jit_optimization_time | jit_emission_count | jit_emission_time | jit_deform_time | jit_deform_count | stats_since | minmax_stats_since | storage_blks_read | orcache_blks_hit | storage_blk_read_time | orcache_blk_read_time | total_plan_peakmem | min_plan_peakmem | max_plan_peakmem | total_exec_peakmem | min_exec_peakmem | max_exec_peakmem | generic_plans | generic_calls | named_generic_plans | max_generic_plan_size | analytics_total_thread_wait_time | analytics_total_result_size | analytics_total_cpu_time | analytics_total_rows_scanned | analytics_total_disk_spill | analytics_cache_hit_bytes | analytics_remote_read_bytes | analytics_head_request_count | analytics_get_request_count 
+--------+------+----------+---------+-------+-------+-----------------+---------------+---------------+----------------+------------------+-------+-----------------+---------------+---------------+----------------+------------------+------+-----------------+------------------+---------------------+---------------------+----------------+-----------------+--------------------+--------------------+----------------+-------------------+----------------------+-----------------------+---------------------+----------------------+--------------------+---------------------+-------------+---------+-----------+---------------+---------------------+--------------------+-------------------+------------------------+-----------------------+--------------------+-------------------+-----------------+------------------+-------------+--------------------+-------------------+------------------+-----------------------+-----------------------+--------------------+------------------+------------------+--------------------+------------------+------------------+---------------+---------------+---------------------+-----------------------+----------------------------------+-----------------------------+--------------------------+------------------------------+----------------------------+---------------------------+-----------------------------+------------------------------+-----------------------------
+(0 rows)
+
+Time: 232.830 ms

@@ -1,0 +1,28 @@
+Timing is on.
+== count after an external Iceberg commit, same foreign table
+  count   
+----------
+ 60001000
+(1 row)
+
+Time: 587.498 ms
+ count 
+-------
+  1000
+(1 row)
+
+Time: 357.498 ms
+== stats for the lake queries
+ calls | mean_ms | rows_scanned | s3_read | cache_hit | s3_gets |                                 query                                  
+-------+---------+--------------+---------+-----------+---------+------------------------------------------------------------------------
+     1 |   79835 |            0 | 23 MB   | 106 MB    |       0 | CREATE TABLE bookings_2025 AS SELECT * FROM bookings_history WHERE che
+     2 |   10893 |            0 | 70 MB   | 66 MB     |     143 | SELECT date_trunc($1, checkin_date)::date AS month, count(*) AS bookin
+     1 |    8770 |            0 | 168 MB  | 39 MB     |     343 | SELECT $1 AS source, count(*), round(avg(room_rate),$2) AS avg_rate FR
+     1 |    8139 |            0 | 0 bytes | 0 bytes   |       0 | CREATE TABLE bookings_recent AS SELECT $1 + g AS booking_id, $2 + (ran
+     1 |    7904 |            0 | 0 bytes | 0 bytes   |       0 | CREATE INDEX ON bookings_2025 (checkin_date)
+     1 |    6683 |            0 | 0 bytes | 62 MB     |       0 | SELECT date_trunc($1, d)::date AS month, sum(c) AS bookings, sum(r) AS
+     1 |    3340 |            0 | 0 bytes | 0 bytes   |       0 | SELECT date_trunc($1, checkin_date)::date AS month, count(*), sum(room
+     1 |    3257 |            0 | 0 bytes | 23 MB     |       0 | SELECT h.city, count(*) AS bookings, round(sum(b.room_rate * b.nights)
+(8 rows)
+
+Time: 239.678 ms

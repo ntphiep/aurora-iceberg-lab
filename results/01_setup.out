@@ -1,0 +1,43 @@
+Timing is on.
+                              version                              
+-------------------------------------------------------------------
+ PostgreSQL 17.11 on aarch64-linux, compiled by gcc-10.5.0, 64-bit
+(1 row)
+
+Time: 244.303 ms
+CREATE EXTENSION
+Time: 511.972 ms
+                                                  List of installed extensions
+       Name       | Version | Schema |                                       Description                                        
+------------------+---------+--------+------------------------------------------------------------------------------------------
+ aurora_analytics | 1.0.0   | public | Amazon Aurora PostgreSQL extension for querying Amazon S3 and Amazon S3 Tables resources
+(1 row)
+
+CREATE FOREIGN TABLE
+Time: 825.798 ms
+                   Foreign table "public.bookings_history"
+    Column    |     Type      | Collation | Nullable | Default | FDW options 
+--------------+---------------+-----------+----------+---------+-------------
+ booking_id   | bigint        |           |          |         | 
+ hotel_id     | integer       |           |          |         | 
+ supplier     | text          | C         |          |         | 
+ checkin_date | date          |           |          |         | 
+ nights       | integer       |           |          |         | 
+ room_rate    | numeric(10,2) |           |          |         | 
+ currency     | text          | C         |          |         | 
+ status       | text          | C         |          |         | 
+Server: aurora_analytics_server
+FDW options: (location 'arn:aws:glue:us-east-1:<account-id>:table/aurora_lab/bookings_history', region 'us-east-1', format 'iceberg')
+
+SELECT 5000
+Time: 268.527 ms
+ALTER TABLE
+Time: 250.765 ms
+SELECT 2000000
+Time: 8685.163 ms (00:08.685)
+CREATE INDEX
+Time: 1243.470 ms (00:01.243)
+ANALYZE
+Time: 240.882 ms
+ANALYZE
+Time: 355.528 ms

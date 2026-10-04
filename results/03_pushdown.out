@@ -1,0 +1,86 @@
+Timing is on.
+== Q2 plan
+                                                                                                                                                                                                            QUERY PLAN                                                                                                                                                                                                             
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=1560100.00..1560104.00 rows=200 width=44)
+   Output: ((date_trunc('month'::text, (checkin_date)::timestamp with time zone))::date), count(*), sum((room_rate * (nights)::numeric))
+   Group Key: (date_trunc('month'::text, (bookings_history.checkin_date)::timestamp with time zone))::date
+   ->  Custom Scan on public.bookings_history  (cost=100.00..1410100.00 rows=12000000 width=24)
+         Output: (date_trunc('month'::text, (checkin_date)::timestamp with time zone))::date, room_rate, nights
+         Pushdown SQL: SELECT checkin_date, nights, room_rate FROM (SELECT checkin_date::DATE AS checkin_date, nights::INTEGER AS nights, room_rate::DECIMAL(10,2) AS room_rate, status::VARCHAR COLLATE "C" AS status FROM system.main.iceberg_scan($aurora_analytics_parameter_1, allow_moved_paths = true) AS bookings_history) bookings_history WHERE (checkin_date >= '2025-01-01'::DATE) AND (status = 'confirmed'::VARCHAR)
+         ->  ICEBERG_SCAN  (cost=0.00..0.00 rows=12000000 width=16)
+               Table: bookings_history
+               Filters: checkin_date>='2025-01-01'::DATE, status='confirmed'
+               Projections: checkin_date, nights, room_rate
+ Query Identifier: 6193228660212670275
+ Unsupported Pushdown Expressions: 
+ 1: Function
+    Description: date_trunc(text,timestamp with time zone)
+(14 rows)
+
+Time: 590.808 ms
+== Q2 without status filter
+  count   |        sum        
+----------+-------------------
+ 19985655 | 17587592083.27000
+(1 row)
+
+Time: 757.315 ms
+== Q2 with COLLATE "C"
+  count   |        sum        
+----------+-------------------
+ 11991276 | 10553904316.50000
+(1 row)
+
+Time: 749.538 ms
+== Q2 plan with COLLATE "C"
+                                                                                                                                                                                                                                 QUERY PLAN                                                                                                                                                                                                                                 
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan  (cost=0.00..0.00 rows=1 width=24)
+   Output: aurora_analytics.count, (aurora_analytics.sum)::numeric
+   Pushdown SQL: SELECT count(*) AS count, sum((room_rate * (nights)::numeric)) AS sum FROM (SELECT checkin_date::DATE AS checkin_date, nights::INTEGER AS nights, room_rate::DECIMAL(10,2) AS room_rate, status::VARCHAR COLLATE "C" AS status FROM system.main.iceberg_scan($aurora_analytics_parameter_1, allow_moved_paths = true) AS bookings_history) bookings_history WHERE ((checkin_date >= '2025-01-01'::DATE) AND (status = ('confirmed'::VARCHAR COLLATE "C")))
+   ->  UNGROUPED_AGGREGATE
+         Aggregates: count_star(), sum(#0)
+         ->  PROJECTION  (cost=0.00..0.00 rows=12000000 width=8)
+               Projections: (room_rate * CAST(nights AS DECIMAL(18,3)))
+               ->  ICEBERG_SCAN  (cost=0.00..0.00 rows=12000000 width=12)
+                     Table: bookings_history
+                     Filters: checkin_date>='2025-01-01'::DATE, status='confirmed'
+                     Projections: nights, room_rate
+ Query Identifier: 5700706139400466117
+(12 rows)
+
+Time: 372.427 ms
+== Q2 default collation, same shape
+  count   |        sum        
+----------+-------------------
+ 11991276 | 10553904316.50000
+(1 row)
+
+Time: 753.126 ms
+== Q3 history part alone
+ count | round  
+-------+--------
+ 11904 | 218.03
+(1 row)
+
+Time: 805.407 ms
+                                                                                                                                                             QUERY PLAN                                                                                                                                                             
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Custom Scan  (cost=0.00..0.00 rows=1 width=16)
+   Output: aurora_analytics.count, (aurora_analytics.round)::numeric
+   Pushdown SQL: SELECT count(*) AS count, round(avg(room_rate), 2::INTEGER) AS round FROM (SELECT hotel_id::INTEGER AS hotel_id, room_rate::DECIMAL(10,2) AS room_rate FROM system.main.iceberg_scan($aurora_analytics_parameter_1, allow_moved_paths = true) AS bookings_history) bookings_history WHERE (hotel_id = 42::INTEGER)
+   ->  PROJECTION  (cost=0.00..0.00 rows=1 width=16)
+         Projections: count, round
+         ->  UNGROUPED_AGGREGATE
+               Aggregates: count_star(), avg(#0)
+               ->  PROJECTION  (cost=0.00..0.00 rows=12000000 width=8)
+                     Projections: room_rate
+                     ->  ICEBERG_SCAN  (cost=0.00..0.00 rows=12000000 width=8)
+                           Table: bookings_history
+                           Filters: hotel_id=42
+                           Projections: room_rate
+ Query Identifier: -156583090558233092
+(14 rows)
+
+Time: 320.327 ms
